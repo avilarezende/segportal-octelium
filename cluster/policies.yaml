@@ -1,0 +1,22 @@
+# Acesso padrão: negado até uma regra ALLOW.
+# DENY de maior ou igual prioridade sempre vence ALLOW.
+kind: Policy
+metadata:
+  name: allow-segportal-users
+spec:
+  rules:
+    - effect: ALLOW
+      condition:
+        match: '"segportal-users" in ctx.user.spec.groups'
+    - effect: ALLOW
+      condition:
+        match: '"segportal-admins" in ctx.user.spec.groups'
+---
+kind: Policy
+metadata:
+  name: allow-segportal-admins
+spec:
+  rules:
+    - effect: ALLOW
+      condition:
+        match: '"segportal-admins" in ctx.user.spec.groups'

@@ -1,0 +1,21 @@
+# Usuários DEMO — use SEMPRE um IdentityProvider (OIDC/SAML -> AD) em produção.
+# Não crie contas locais no Octelium fora de laboratório.
+# O admin recebe a Policy built-in allow-all (acesso ao API Server do Cluster)
+# — atenção: isso é equivalente a root do Cluster, remova em produção.
+kind: User
+metadata:
+  name: admin
+spec:
+  type: HUMAN
+  email: admin@seu-dominio.exemplo
+  groups: ["segportal-admins", "segportal-users"]
+  authorization:
+    policies: ["allow-all"]
+---
+kind: User
+metadata:
+  name: usuario
+spec:
+  type: HUMAN
+  email: usuario@seu-dominio.exemplo
+  groups: ["segportal-users"]

@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks (secret scanning)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Syntax check (bash)
+        run: |
+          bash -n scripts/apply.sh
+          bash -n scripts/guided.sh
+          bash -n instance/create-instance.sh
+          bash -n instance/tools/install-clients.sh
+
+      - name: Validar YAML do cluster (recursos obrigatórios)
+        env:
+          SEGPORTAL_JUMP_HOST_KEY: ssh-ed25519 ci-placeholder-key
+        run: bash scripts/apply.sh --profile cluster
+
+      - name: Validar template instance
+        env:
+          SEGPORTAL_JUMP_HOST_KEY: ssh-ed25519 ci-placeholder-key
+        run: bash scripts/apply.sh --profile instance --upstream-host 10.0.2.2
+
+      - name: Garantir que NÃO há placeholders não substituídos nem insecureIgnoreHostKey
+        run: |
+          if grep -rn "insecureIgnoreHostKey: true" cluster/ instance/ --include="*.yaml" --include="*.tpl" | grep -v "^#"; then
+            echo "ERRO: insecureIgnoreHostKey: true encontrado"
+            exit 1
+          fi

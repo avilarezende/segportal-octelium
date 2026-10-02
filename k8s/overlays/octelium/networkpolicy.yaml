@@ -1,0 +1,20 @@
+# Só o data-plane do Octelium (namespace `octelium`) e o próprio
+# namespace `segportal` podem falar com os pods. O Ingress público
+# deste overlay é removido: a borda ZTNA é o Cluster Octelium.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-octelium-and-same-namespace
+  labels:
+    app.kubernetes.io/name: segportal
+    app.kubernetes.io/component: ztna
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: octelium
+        - podSelector: {}

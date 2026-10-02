@@ -1,0 +1,75 @@
+#cloud-config
+# Instância Linux exclusiva do Cluster Octelium.
+# O SegPortal continua no Docker Compose do host. Esta VM não usa Compose.
+hostname: octelium
+manage_etc_hosts: true
+package_update: true
+packages:
+  - curl
+  - ca-certificates
+  - jq
+  - iptables
+  - openssh-server
+users:
+  - name: ubuntu
+    gecos: SegPortal Octelium
+    groups: [sudo]
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: true
+    ssh_authorized_keys:
+      - __SSH_PUBLIC_KEY__
+write_files:
+  - path: /etc/octelium-segportal.env
+    permissions: "0644"
+    content: |
+      OCTELIUM_DOMAIN=__OCTELIUM_DOMAIN__
+      OCTELIUM_INSTALL_FLAGS="__INSTALL_FLAGS__"
+  - path: /usr/local/sbin/install-octelium-segportal.sh
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      # shellcheck disable=SC1091
+      source /etc/octelium-segportal.env
+      marker=/var/lib/octelium-segportal/installed
+      if [[ -f "$marker" ]]; then
+        echo "Octelium já instalado em ${OCTELIUM_DOMAIN}"
+        exit 0
+      fi
+      install -d /var/lib/octelium-segportal
+      ip=$(ip -4 -o addr show scope global | awk '{print $4}' | cut -d/ -f1 | head -1)
+      if [[ -n "${ip}" ]] && ! grep -q "octelium-api.${OCTELIUM_DOMAIN}" /etc/hosts; then
+        echo "${ip} ${OCTELIUM_DOMAIN} octelium-api.${OCTELIUM_DOMAIN} portal.${OCTELIUM_DOMAIN} segportal.${OCTELIUM_DOMAIN} portal-auth.${OCTELIUM_DOMAIN}" >> /etc/hosts
+      fi
+      curl -fsSL -o /var/lib/octelium-segportal/install-cluster.sh https://octelium.com/install-cluster.sh
+      chmod 0755 /var/lib/octelium-segportal/install-cluster.sh
+      # shellcheck disable=SC2086
+      /var/lib/octelium-segportal/install-cluster.sh \
+        --domain "${OCTELIUM_DOMAIN}" \
+        ${OCTELIUM_INSTALL_FLAGS}
+      date -Is > "$marker"
+  - path: /etc/systemd/system/octelium-segportal.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Instala o Cluster Octelium do SegPortal
+      After=network-online.target
+      Wants=network-online.target
+      ConditionPathExists=!/var/lib/octelium-segportal/installed
+
+      [Service]
+      Type=oneshot
+      Environment=HOME=/root
+      Environment=XDG_CONFIG_HOME=/root/.config
+      ExecStart=/usr/local/sbin/install-octelium-segportal.sh
+      RemainAfterExit=yes
+      TimeoutStartSec=infinity
+      StandardOutput=append:/var/log/octelium-segportal.log
+      StandardError=append:/var/log/octelium-segportal.log
+
+      [Install]
+      WantedBy=multi-user.target
+runcmd:
+  - systemctl daemon-reload
+  - systemctl enable --now octelium-segportal.service

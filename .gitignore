@@ -1,0 +1,12 @@
+# Estado local da instância guiada
+instance/.local/
+
+# Secrets/locais
+*.key
+*.pem
+!docs/images/*.png
+.env
+
+# OS
+.DS_Store
+Thumbs.db

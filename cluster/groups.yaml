@@ -1,0 +1,11 @@
+# Grupos ZTNA do fork SegPortal.
+# Aplicar com: octeliumctl apply groups.yaml
+kind: Group
+metadata:
+  name: segportal-users
+spec: {}
+---
+kind: Group
+metadata:
+  name: segportal-admins
+spec: {}

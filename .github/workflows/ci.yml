@@ -46,26 +46,4 @@ jobs:
         run: bash scripts/apply.sh --profile instance --upstream-host 10.0.2.2
 
       - name: Garantir que NÃO há insecureIgnoreHostKey ativo nos recursos
-        run: |
-          python3 - <<'PY'
-from pathlib import Path
-
-bad = []
-for path in sorted(Path(".").rglob("*")):
-    if path.suffix not in (".yaml", ".tpl"):
-        continue
-    if ".git" in path.parts or ".github" in path.parts:
-        continue
-    text = path.read_text(encoding="utf-8", errors="ignore")
-    for i, line in enumerate(text.splitlines(), 1):
-        stripped = line.lstrip()
-        if stripped.startswith("#"):
-            continue
-        if "insecureIgnoreHostKey: true" in stripped:
-            bad.append(f"{path}:{i}: {stripped}")
-
-if bad:
-    raise SystemExit("ERRO: insecureIgnoreHostKey ativo:\n" + "\n".join(bad))
-print("OK: nenhum insecureIgnoreHostKey: true ativo nos recursos YAML/templates.")
-PY
-          echo "OK: placeholder __JUMP_HOST_KEY__ pode aparecer em templates (substituído no apply)."
+        run: python3 scripts/check-insecure-ssh.py

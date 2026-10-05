@@ -81,6 +81,21 @@ sudo apt-get install -y qemu-system-x86 qemu-utils cloud-image-utils
 ./instance/create-instance.sh
 ```
 
+Sem `/dev/kvm`, o script usa a emulação QEMU TCG automaticamente (mais lenta).
+KVM é recomendado para desempenho, mas não é obrigatório para iniciar a VM.
+As portas encaminhadas pela VM escutam somente em `127.0.0.1`. A imagem Ubuntu
+é conferida contra o SHA-256 oficial antes de ser usada; imagens personalizadas
+exigem HTTPS e `OCTELIUM_CLOUD_IMAGE_SHA256`. Verifique a fingerprint SSH pelo
+console da VM antes da primeira conexão; a validação da host key permanece ativa.
+
+O overlay Kubernetes consome a base do SegPortal por uma referência Git fixada
+em um commit. Não depende de uma cópia `k8s/base` neste bundle. Para validar sem
+aplicar recursos ao cluster:
+
+```bash
+kubectl kustomize k8s/overlays/octelium
+```
+
 A microVM KVM usa Ubuntu 24.04, systemd e o instalador oficial
 (`install-cluster.sh --domain octelium.segportal.local --nat`). SSH no host:
 porta `2222`. HTTPS do Cluster: porta `8443`. A VM alcança o Compose em
@@ -174,3 +189,9 @@ Hosts RDP/SSH atrás de NAT podem ser publicados por um cliente
 ## Licença
 
 Mesma do SegPortal — MIT (ver `LICENSE` no repositório upstream).
+
+## Ambiente na nuvem
+
+Instalação, locks, diagnóstico e separação desenvolvimento/produção estão documentados em
+[`antigravity-config/cloud/README.md`](../antigravity-config/cloud/README.md) no workspace com os sete checkouts.
+No GitHub: [guia do ambiente](https://github.com/avilarezende/antigravity-config/blob/main/cloud/README.md).

@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -14,19 +17,22 @@ jobs:
   security-scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
       - name: Gitleaks (secret scanning)
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install locked validation dependencies
+        run: python3 -m pip install --require-hashes -r requirements-dev.lock
 
       - name: Syntax check (bash)
         run: |
@@ -40,6 +46,9 @@ jobs:
           SEGPORTAL_JUMP_HOST_KEY: ssh-ed25519 ci-placeholder-key
         run: bash scripts/apply.sh --profile cluster
 
+      - name: Validar checksums e fronteira local da VM
+        run: python3 -m unittest discover -s tests -v
+
       - name: Validar template instance
         env:
           SEGPORTAL_JUMP_HOST_KEY: ssh-ed25519 ci-placeholder-key
@@ -47,3 +56,13 @@ jobs:
 
       - name: Garantir que NÃO há insecureIgnoreHostKey ativo nos recursos
         run: python3 scripts/check-insecure-ssh.py
+
+      - name: Install verified kubectl
+        run: |
+          curl -fsSLo kubectl https://dl.k8s.io/release/v1.34.1/bin/linux/amd64/kubectl
+          curl -fsSLo kubectl.sha256 https://dl.k8s.io/release/v1.34.1/bin/linux/amd64/kubectl.sha256
+          echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check
+          chmod +x kubectl
+
+      - name: Validar overlay Kubernetes sem Ingress público
+        run: PATH="$PWD:$PATH" python3 scripts/check-k8s-overlay.py

@@ -10,3 +10,6 @@ instance/.local/
 # OS
 .DS_Store
 Thumbs.db
+# Local Python test artifacts
+__pycache__/
+*.py[cod]

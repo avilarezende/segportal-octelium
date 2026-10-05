@@ -2,6 +2,7 @@
 # Cria uma instância Linux (microVM KVM) só para o Cluster Octelium.
 # O SegPortal em si continua no Docker Compose. Octelium não entra nele.
 set -euo pipefail
+umask 077
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOCAL="${ROOT}/.local"
@@ -42,7 +43,7 @@ install_flags=()
 case "${OCTELIUM_NAT:-s}" in
   s|S|yes|true|1) install_flags+=(--nat) ;;
 esac
-case "${OCTELIUM_FORCE_MACHINE_IP:-s}" in
+case "${OCTELIUM_FORCE_MACHINE_IP:-n}" in
   s|S|yes|true|1) install_flags+=(--force-machine-ip) ;;
 esac
 if [[ -n "${OCTELIUM_PUBLIC_IP:-}" ]]; then
@@ -58,11 +59,37 @@ sed \
 cp "${ROOT}/cloud-init/meta-data" "${LOCAL}/meta-data"
 cloud-localds "$SEED" "${LOCAL}/user-data" "${LOCAL}/meta-data"
 
+# Verify images before using them; custom sources require an explicit digest.
+expected_sha256="${OCTELIUM_CLOUD_IMAGE_SHA256:-}"
+if [[ -z "$expected_sha256" && -f "${IMAGE}.sha256" ]]; then
+  expected_sha256="$(cat "${IMAGE}.sha256")"
+fi
+if [[ -z "$expected_sha256" ]]; then
+  case "$IMAGE_URL" in
+    https://cloud-images.ubuntu.com/*)
+      curl --proto '=https' --proto-redir '=https' -fsSL \
+        -o "${LOCAL}/SHA256SUMS" "${IMAGE_URL%/*}/SHA256SUMS"
+      image_name="${IMAGE_URL##*/}"
+      expected_sha256="$(awk -v name="$image_name" '$2 == name || $2 == "*" name {print $1}' "${LOCAL}/SHA256SUMS")"
+      ;;
+    *)
+      echo "Defina OCTELIUM_CLOUD_IMAGE_SHA256 para uma imagem personalizada." >&2
+      exit 1
+      ;;
+  esac
+fi
+[[ "$IMAGE_URL" == https://* && "$expected_sha256" =~ ^[a-fA-F0-9]{64}$ ]] || {
+  echo "Imagem requer HTTPS e um SHA-256 válido." >&2
+  exit 1
+}
 if [[ ! -f "$IMAGE" ]]; then
   echo "Baixando imagem Ubuntu 24.04..."
-  curl -fL --retry 3 -o "${IMAGE}.partial" "$IMAGE_URL"
+  curl --proto '=https' --proto-redir '=https' -fL --retry 3 -o "${IMAGE}.partial" "$IMAGE_URL"
+  printf '%s  %s\n' "$expected_sha256" "${IMAGE}.partial" | sha256sum --check --status
   mv "${IMAGE}.partial" "$IMAGE"
 fi
+printf '%s  %s\n' "$expected_sha256" "$IMAGE" | sha256sum --check --status
+printf '%s\n' "$expected_sha256" > "${IMAGE}.sha256"
 
 if [[ ! -f "$DISK" ]]; then
   cp --reflink=auto "$IMAGE" "$DISK" 2>/dev/null || cp "$IMAGE" "$DISK"
@@ -90,14 +117,15 @@ echo "Subindo instância Octelium (${DOMAIN}, ${MEMORY} MiB, ${CPUS} vCPU)."
   -smp "$CPUS" \
   -drive "file=${DISK},if=virtio,format=qcow2" \
   -drive "file=${SEED},if=virtio,format=raw,media=cdrom" \
-  -netdev "user,id=n0,hostfwd=tcp::${SSH_PORT}-:22,hostfwd=tcp::${HTTPS_PORT}-:443" \
+  -netdev "user,id=n0,hostfwd=tcp:127.0.0.1:${SSH_PORT}-:22,hostfwd=tcp:127.0.0.1:${HTTPS_PORT}-:443" \
   -device virtio-net-pci,netdev=n0 \
   -display none \
   -serial mon:stdio \
   -pidfile "$PIDFILE" \
   -name octelium,process=segportal-octelium
 
-echo "SSH: ssh -i ${LOCAL}/id_ed25519 -p ${SSH_PORT} -o StrictHostKeyChecking=no ubuntu@127.0.0.1"
+echo "SSH: ssh -i ${LOCAL}/id_ed25519 -p ${SSH_PORT} ubuntu@127.0.0.1"
+echo "Verifique a fingerprint da host key pelo console da VM antes do primeiro SSH."
 echo "HTTPS publicado no host: https://127.0.0.1:${HTTPS_PORT}"
 echo "O SegPortal no host é alcançado pela VM em http://10.0.2.2:8080 e :8090."
 echo "Log do instalador, depois do SSH: sudo tail -f /var/log/octelium-segportal.log"
